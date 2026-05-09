@@ -1,0 +1,159 @@
+<!-- templates/index.html -->
+{% extends "base.html" %}
+
+{% block title %}Dream Simulator - Enter Your Dreams{% endblock %}
+{% block body_class %}landing{% endblock %}
+
+{% block content %}
+<div class="landing-container">
+    <div class="particles" id="particles"></div>
+    
+    <header class="landing-header">
+        <h1 class="title glitch" data-text="DREAM SIMULATOR">DREAM SIMULATOR</h1>
+        <p class="tagline">What lurks in the depths of your mind?</p>
+    </header>
+    
+    <main class="landing-main">
+        <div class="auth-container" id="auth-container">
+            <!-- Login Form -->
+            <div class="auth-form" id="login-form">
+                <h2>Return to Your Dreams</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="input-group">
+                        <input type="text" id="login-username" placeholder="Username" required>
+                        <span class="input-focus"></span>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="login-password" placeholder="Password" required>
+                        <span class="input-focus"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <span>Enter the Dream</span>
+                    </button>
+                </form>
+                <p class="auth-switch">
+                    First time? <a href="#" onclick="showRegister()">Create your dreamscape</a>
+                </p>
+            </div>
+            
+            <!-- Register Form -->
+            <div class="auth-form hidden" id="register-form">
+                <h2>Begin Your Journey</h2>
+                <form onsubmit="handleRegister(event)">
+                    <div class="input-group">
+                        <input type="text" id="register-username" placeholder="Choose a name" required minlength="3">
+                        <span class="input-focus"></span>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" id="register-password" placeholder="Secret key (6+ characters)" required minlength="6">
+                        <span class="input-focus"></span>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <span>Create Dreamscape</span>
+                    </button>
+                </form>
+                <p class="auth-switch">
+                    Already dreaming? <a href="#" onclick="showLogin()">Return</a>
+                </p>
+            </div>
+        </div>
+        
+        <div class="error-message hidden" id="error-message"></div>
+    </main>
+    
+    <footer class="landing-footer">
+        <p class="warning">
+            ⚠️ This experience contains psychological themes. 
+            Dreams may become intense based on your choices.
+        </p>
+    </footer>
+</div>
+
+<script>
+    // Check if already logged in
+    fetch('/api/auth/status')
+        .then(r => r.json())
+        .then(data => {
+            if (data.authenticated) {
+                window.location.href = '/dream';
+            }
+        });
+    
+    function showRegister() {
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('register-form').classList.remove('hidden');
+    }
+    
+    function showLogin() {
+        document.getElementById('register-form').classList.add('hidden');
+        document.getElementById('login-form').classList.remove('hidden');
+    }
+    
+    function showError(message) {
+        const el = document.getElementById('error-message');
+        el.textContent = message;
+        el.classList.remove('hidden');
+        setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+    
+    async function handleLogin(e) {
+        e.preventDefault();
+        const username = document.getElementById('login-username').value;
+        const password = document.getElementById('login-password').value;
+        
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                window.location.href = '/dream';
+            } else {
+                showError(data.error || 'Login failed');
+            }
+        } catch (err) {
+            showError('Connection error');
+        }
+    }
+    
+    async function handleRegister(e) {
+        e.preventDefault();
+        const username = document.getElementById('register-username').value;
+        const password = document.getElementById('register-password').value;
+        
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username, password})
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                window.location.href = '/dream';
+            } else {
+                showError(data.error || 'Registration failed');
+            }
+        } catch (err) {
+            showError('Connection error');
+        }
+    }
+    
+    // Particle animation
+    function createParticles() {
+        const container = document.getElementById('particles');
+        for (let i = 0; i < 50; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.animationDelay = Math.random() * 20 + 's';
+            particle.style.animationDuration = (15 + Math.random() * 20) + 's';
+            container.appendChild(particle);
+        }
+    }
+    createParticles();
+</script>
+{% endblock %}

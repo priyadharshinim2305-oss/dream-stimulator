@@ -1,0 +1,153 @@
+<!-- templates/history.html -->
+{% extends "base.html" %}
+
+{% block title %}Dream History{% endblock %}
+{% block body_class %}history{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <header class="history-header">
+        <h1>Your Dreams</h1>
+        <nav>
+            <a href="/dream" class="btn btn-secondary">New Dream</a>
+            <button onclick="logout()" class="btn btn-text">Logout</button>
+        </nav>
+    </header>
+    
+    <main class="history-main">
+        <section class="profile-section">
+            <h2>Psychological Profile</h2>
+            <div class="profile-stats" id="profile-stats">
+                <!-- Loaded dynamically -->
+            </div>
+        </section>
+        
+        <section class="dreams-section">
+            <h2>Dream Journal</h2>
+            <div class="dreams-list" id="dreams-list">
+                <!-- Loaded dynamically -->
+            </div>
+        </section>
+    </main>
+</div>
+
+<script>
+    async function loadHistory() {
+        try {
+            const response = await fetch('/api/history');
+            const data = await response.json();
+            
+            // Display profile
+            if (data.psychological_profile) {
+                displayProfile(data.psychological_profile);
+            }
+            
+            // Display dreams
+            displayDreams(data.dreams);
+            
+        } catch (err) {
+            console.error('Failed to load history:', err);
+        }
+    }
+    
+    function displayProfile(profile) {
+        const container = document.getElementById('profile-stats');
+        
+        const traits = [
+            {name: 'Confrontation', value: profile.confrontation || 0.5},
+            {name: 'Avoidance', value: profile.avoidance || 0.5},
+            {name: 'Curiosity', value: profile.curiosity || 0.5},
+            {name: 'Denial', value: profile.denial || 0.5}
+        ];
+        
+        container.innerHTML = traits.map(t => `
+            <div class="profile-trait">
+                <span class="trait-name">${t.name}</span>
+                <div class="trait-bar">
+                    <div class="trait-fill" style="width: ${t.value * 100}%"></div>
+                </div>
+                <span class="trait-value">${(t.value * 100).toFixed(0)}%</span>
+            </div>
+        `).join('');
+        
+        if (profile.recurring_symbols && profile.recurring_symbols.length > 0) {
+            container.innerHTML += `
+                <div class="recurring-symbols">
+                    <h4>Recurring Symbols</h4>
+                    <div class="symbols-list">
+                        ${profile.recurring_symbols.slice(0, 10).map(s => `<span class="symbol-tag">${s}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    function displayDreams(dreams) {
+        const container = document.getElementById('dreams-list');
+        
+        if (!dreams || dreams.length === 0) {
+            container.innerHTML = '<p class="no-dreams">No dreams recorded yet. Close your eyes and begin...</p>';
+            return;
+        }
+        
+        container.innerHTML = dreams.map(d => `
+            <div class="dream-card ${d.was_nightmare ? 'nightmare' : ''}" onclick="viewDream(${d.id})">
+                <div class="dream-meta">
+                    <span class="dream-date">${new Date(d.started_at).toLocaleDateString()}</span>
+                    <span class="dream-depth">${d.depth_name}</span>
+                    ${d.was_nightmare ? '<span class="nightmare-badge">Nightmare</span>' : ''}
+                </div>
+                <div class="dream-stats">
+                    <span>Fear: ${d.fear_level.toFixed(1)}/10</span>
+                    <span>Choices: ${d.total_choices}</span>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    async function viewDream(id) {
+        try {
+            const response = await fetch(`/api/history/${id}`);
+            const data = await response.json();
+            
+            // Create modal with dream details
+            const modal = document.createElement('div');
+            modal.className = 'dream-modal';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <button class="modal-close" onclick="this.parentElement.parentElement.remove()">&times;</button>
+                    <h2>Dream Replay</h2>
+                    <div class="scenes-timeline">
+                        ${data.scenes.map((s, i) => `
+                            <div class="scene-item">
+                                <div class="scene-number">${i + 1}</div>
+                                <div class="scene-content">
+                                    <p class="scene-narrative">${s.narrative}</p>
+                                    ${s.choices_made.map(c => `
+                                        <div class="scene-choice">
+                                            <span class="choice-text">"${c.text}"</span>
+                                            <span class="choice-time">${(c.response_time_ms/1000).toFixed(1)}s</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            
+        } catch (err) {
+            console.error('Failed to load dream:', err);
+        }
+    }
+    
+    async function logout() {
+        await fetch('/api/auth/logout', {method: 'POST'});
+        window.location.href = '/';
+    }
+    
+    // Load on page load
+    loadHistory();
+</script>
+{% endblock %}

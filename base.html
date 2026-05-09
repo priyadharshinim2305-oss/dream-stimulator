@@ -1,0 +1,19 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Dream Simulator{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="[fonts.googleapis.com](https://fonts.googleapis.com/css2?family=Crimson+Text:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500&display=swap)" rel="stylesheet">
+    {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    <div id="app">
+        {% block content %}{% endblock %}
+    </div>
+    <script src="{{ url_for('static', filename='js/dream.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

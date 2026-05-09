@@ -1,0 +1,407 @@
+<!-- templates/dream.html -->
+{% extends "base.html" %}
+
+{% block title %}Dreaming...{% endblock %}
+{% block body_class %}dreaming{% endblock %}
+
+{% block content %}
+<div class="dream-container" id="dream-container">
+    <!-- Background effects -->
+    <div class="dream-bg" id="dream-bg">
+        <div class="fog"></div>
+        <div class="vignette"></div>
+    </div>
+    
+    <!-- Header -->
+    <header class="dream-header">
+        <div class="dream-stats">
+            <div class="stat">
+                <span class="stat-label">Depth</span>
+                <span class="stat-value" id="depth-display">Surface Dreams</span>
+            </div>
+            <div class="stat fear-stat">
+                <span class="stat-label">Fear</span>
+                <div class="fear-bar">
+                    <div class="fear-fill" id="fear-bar"></div>
+                </div>
+            </div>
+            <div class="stat tension-stat">
+                <span class="stat-label">Tension</span>
+                <div class="tension-bar">
+                    <div class="tension-fill" id="tension-bar"></div>
+                </div>
+            </div>
+        </div>
+        <button class="btn btn-wake" onclick="wakeUp()">
+            <span>Wake Up</span>
+        </button>
+    </header>
+    
+    <!-- Main dream content -->
+    <main class="dream-main">
+        <!-- Pre-dream state -->
+        <div class="dream-state" id="pre-dream">
+            <div class="dream-intro">
+                <h2>Close your eyes...</h2>
+                <p>Your consciousness begins to drift. The waking world fades away.</p>
+                <button class="btn btn-primary btn-dream-start" onclick="startDream()">
+                    <span>Fall Asleep</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Active dream -->
+        <div class="dream-state hidden" id="active-dream">
+            <div class="narrative-container">
+                <p class="narrative" id="narrative"></p>
+            </div>
+            
+            <div class="choices-container" id="choices-container">
+                <!-- Choices will be injected here -->
+            </div>
+            
+            <div class="choice-feedback hidden" id="choice-feedback">
+                <p id="feedback-text"></p>
+            </div>
+        </div>
+        
+        <!-- Dream ended -->
+        <div class="dream-state hidden" id="dream-ended">
+            <div class="ending-container">
+                <h2 class="ending-title">You Wake</h2>
+                <p class="ending-narrative" id="ending-narrative"></p>
+                
+                <div class="analysis-container" id="analysis-container">
+                    <!-- Analysis will be injected -->
+                </div>
+                
+                <div class="ending-actions">
+                    <button class="btn btn-primary" onclick="startDream()">
+                        <span>Dream Again</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="viewHistory()">
+                        <span>View History</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Nightmare overlay -->
+    <div class="nightmare-overlay hidden" id="nightmare-overlay">
+        <div class="nightmare-text">N I G H T M A R E</div>
+    </div>
+</div>
+
+<script>
+    const DreamApp = {
+        currentScene: null,
+        isNightmare: false,
+        
+        async startDream() {
+            document.getElementById('pre-dream').classList.add('hidden');
+            document.getElementById('dream-ended').classList.add('hidden');
+            document.getElementById('active-dream').classList.remove('hidden');
+            
+            // Reset UI
+            this.updateFear(0);
+            this.updateTension(0);
+            this.isNightmare = false;
+            document.body.classList.remove('nightmare-mode');
+            
+            try {
+                const response = await fetch('/api/dream/start', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.scene) {
+                    this.displayScene(data.scene);
+                }
+            } catch (err) {
+                console.error('Failed to start dream:', err);
+            }
+        },
+        
+        displayScene(scene) {
+            this.currentScene = scene;
+            
+            // Update stats
+            document.getElementById('depth-display').textContent = scene.depth_name;
+            this.updateFear(scene.fear_level);
+            this.updateTension(scene.tension_level);
+            
+            // Check nightmare mode
+            if (scene.is_nightmare && !this.isNightmare) {
+                this.triggerNightmare();
+            }
+            
+            // Set atmosphere
+            this.setAtmosphere(scene.atmosphere);
+            
+            // Display narrative with typing effect
+            this.typeNarrative(scene.narrative);
+            
+            // Display choices after narrative
+            setTimeout(() => {
+                this.displayChoices(scene.choices);
+            }, scene.narrative.length * 30 + 500);
+        },
+        
+        typeNarrative(text) {
+            const el = document.getElementById('narrative');
+            el.textContent = '';
+            el.classList.add('typing');
+            
+            let i = 0;
+            const typeChar = () => {
+                if (i < text.length) {
+                    el.textContent += text[i];
+                    i++;
+                    setTimeout(typeChar, 25 + Math.random() * 15);
+                } else {
+                    el.classList.remove('typing');
+                }
+            };
+            typeChar();
+        },
+        
+        displayChoices(choices) {
+            const container = document.getElementById('choices-container');
+            container.innerHTML = '';
+            container.classList.add('visible');
+            
+            choices.forEach((choice, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'choice-btn';
+                btn.innerHTML = `<span>${choice.text}</span>`;
+                btn.onclick = () => this.makeChoice(index);
+                btn.style.animationDelay = `${index * 0.15}s`;
+                container.appendChild(btn);
+            });
+        },
+        
+        async makeChoice(index) {
+            // Disable choices
+            document.querySelectorAll('.choice-btn').forEach(btn => {
+                btn.disabled = true;
+                btn.classList.add('disabled');
+            });
+            
+            // Highlight selected
+            document.querySelectorAll('.choice-btn')[index].classList.add('selected');
+            
+            try {
+                const response = await fetch('/api/dream/choose', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({choice_index: index})
+                });
+                const data = await response.json();
+                
+                if (data.ended) {
+                    this.endDream(data);
+                } else {
+                    // Show feedback briefly
+                    if (data.choice_feedback) {
+                        this.showFeedback(data.choice_feedback);
+                    }
+                    
+                    // Transition to next scene
+                    setTimeout(() => {
+                        document.getElementById('choices-container').classList.remove('visible');
+                        setTimeout(() => {
+                            this.displayScene(data.scene);
+                        }, 500);
+                    }, 1500);
+                }
+            } catch (err) {
+                console.error('Choice failed:', err);
+            }
+        },
+        
+        showFeedback(feedback) {
+            const el = document.getElementById('choice-feedback');
+            let text = '';
+            
+            if (feedback.was_panicked) {
+                text = 'Your heart races. A panicked choice.';
+            } else if (feedback.showed_hesitation) {
+                text = 'You hesitated... uncertainty grips you.';
+            } else if (feedback.psychological_tags.includes('brave')) {
+                text = 'Courage stirs within.';
+            } else if (feedback.psychological_tags.includes('avoidant')) {
+                text = 'You turn away from what frightens you.';
+            }
+            
+            if (text) {
+                document.getElementById('feedback-text').textContent = text;
+                el.classList.remove('hidden');
+                setTimeout(() => el.classList.add('hidden'), 1500);
+            }
+        },
+        
+        endDream(data) {
+            document.getElementById('active-dream').classList.add('hidden');
+            document.getElementById('dream-ended').classList.remove('hidden');
+            document.getElementById('nightmare-overlay').classList.add('hidden');
+            document.body.classList.remove('nightmare-mode');
+            
+            // Display ending
+            document.getElementById('ending-narrative').textContent = data.ending_narrative;
+            
+            // Display analysis
+            if (data.analysis) {
+                this.displayAnalysis(data.analysis, data.final_state);
+            }
+        },
+        
+        displayAnalysis(analysis, finalState) {
+            const container = document.getElementById('analysis-container');
+            
+            let html = `
+                <h3>Dream Analysis</h3>
+                <div class="analysis-grid">
+                    <div class="analysis-item">
+                        <span class="label">Depth Reached</span>
+                        <span class="value">${finalState.depth_reached} - ${this.getDepthName(finalState.depth_reached)}</span>
+                    </div>
+                    <div class="analysis-item">
+                        <span class="label">Final Fear Level</span>
+                        <span class="value">${finalState.fear_level.toFixed(1)}/10</span>
+                    </div>
+                    <div class="analysis-item">
+                        <span class="label">Nightmare?</span>
+                        <span class="value">${finalState.was_nightmare ? 'Yes' : 'No'}</span>
+                    </div>
+                    <div class="analysis-item">
+                        <span class="label">Scenes Experienced</span>
+                        <span class="value">${finalState.total_scenes}</span>
+                    </div>
+                </div>
+            `;
+            
+            if (analysis.psychological_insights && analysis.psychological_insights.length > 0) {
+                html += `
+                    <div class="insights">
+                        <h4>Psychological Insights</h4>
+                        <ul>
+                            ${analysis.psychological_insights.map(i => `<li>${i}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            if (analysis.behavioral_patterns) {
+                const p = analysis.behavioral_patterns;
+                html += `
+                    <div class="patterns">
+                        <h4>Behavioral Patterns</h4>
+                        <div class="pattern-bars">
+                            <div class="pattern">
+                                <span>Confrontation</span>
+                                <div class="pattern-bar">
+                                    <div class="pattern-fill" style="width: ${p.confrontation * 100}%"></div>
+                                </div>
+                            </div>
+                            <div class="pattern">
+                                <span>Avoidance</span>
+                                <div class="pattern-bar">
+                                    <div class="pattern-fill" style="width: ${p.avoidance * 100}%"></div>
+                                </div>
+                            </div>
+                            <div class="pattern">
+                                <span>Curiosity</span>
+                                <div class="pattern-bar">
+                                    <div class="pattern-fill" style="width: ${p.curiosity * 100}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        },
+        
+        getDepthName(depth) {
+            const names = {
+                1: "Surface Dreams",
+                2: "Subconscious Echoes",
+                3: "Deep Memory",
+                4: "Primal Fears",
+                5: "The Void"
+            };
+            return names[depth] || "Unknown";
+        },
+        
+        updateFear(level) {
+            const bar = document.getElementById('fear-bar');
+            bar.style.width = `${level * 10}%`;
+            
+            if (level > 7) {
+                bar.classList.add('critical');
+            } else {
+                bar.classList.remove('critical');
+            }
+        },
+        
+        updateTension(level) {
+            const bar = document.getElementById('tension-bar');
+            bar.style.width = `${level * 10}%`;
+        },
+        
+        setAtmosphere(atmosphere) {
+            const container = document.getElementById('dream-container');
+            container.className = 'dream-container';
+            container.classList.add(`atmosphere-${atmosphere}`);
+        },
+        
+        triggerNightmare() {
+            this.isNightmare = true;
+            document.body.classList.add('nightmare-mode');
+            
+            const overlay = document.getElementById('nightmare-overlay');
+            overlay.classList.remove('hidden');
+            
+            setTimeout(() => {
+                overlay.classList.add('hidden');
+            }, 2000);
+        },
+        
+        async wakeUp() {
+            if (confirm('Force yourself awake? The dream will end.')) {
+                try {
+                    const response = await fetch('/api/dream/wake', {method: 'POST'});
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        document.getElementById('active-dream').classList.add('hidden');
+                        document.getElementById('dream-ended').classList.remove('hidden');
+                        document.getElementById('ending-narrative').textContent = data.message;
+                        document.getElementById('analysis-container').innerHTML = '<p>Dream interrupted. No analysis available.</p>';
+                    }
+                } catch (err) {
+                    console.error('Wake failed:', err);
+                }
+            }
+        },
+        
+        viewHistory() {
+            window.location.href = '/history';
+        }
+    };
+    
+    // Global functions for onclick handlers
+    function startDream() { DreamApp.startDream(); }
+    function wakeUp() { DreamApp.wakeUp(); }
+    function viewHistory() { DreamApp.viewHistory(); }
+    
+    // Check auth
+    fetch('/api/auth/status')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.authenticated) {
+                window.location.href = '/';
+            }
+        });
+</script>
+{% endblock %}
